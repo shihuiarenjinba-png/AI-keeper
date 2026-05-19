@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Keeper</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AK</div>
+          <div>
+            <h1>AI Keeper</h1>
+            <p>7日制限の管理台帳</p>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item is-active" data-view="dashboard" type="button">⌂ ダッシュボード</button>
+          <button class="nav-item" data-view="accounts" type="button">□ アカウント</button>
+          <button class="nav-item" data-view="events" type="button">≡ 履歴</button>
+          <button class="nav-item" data-view="settings" type="button">⚙ 接続設定</button>
+        </nav>
+
+        <div class="connection-panel" id="connectionPanel">
+          <div class="connection-dot"></div>
+          <div>
+            <strong id="connectionTitle">未接続</strong>
+            <span id="connectionDetail">GitHub data repoを設定してください</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Private GitHub Repo Sync</p>
+            <h2 id="viewTitle">ダッシュボード</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="refreshButton" type="button" title="再読み込み">↻</button>
+            <button class="primary-button" id="openAddAccount" type="button">＋ アカウント追加</button>
+          </div>
+        </header>
+
+        <section class="notice" id="notice" hidden></section>
+
+        <section class="view is-active" id="dashboardView">
+          <div class="metrics-grid">
+            <article class="metric"><span>利用可能</span><strong id="readyCount">0</strong><small>未制限 + 自動解除済み</small></article>
+            <article class="metric"><span>制限中</span><strong id="limitedCount">0</strong><small>7日解除待ち</small></article>
+            <article class="metric"><span>自動解除済み</span><strong id="autoReadyCount">0</strong><small>7日経過済み</small></article>
+            <article class="metric"><span>次の解除</span><strong id="nextReset">-</strong><small id="nextResetDetail">予定なし</small></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="section-heading"><h3>解除予定</h3></div>
+              <div class="timeline-list" id="resetList"></div>
+            </section>
+            <section class="panel">
+              <div class="section-heading"><h3>最近の履歴</h3></div>
+              <div class="event-list compact" id="recentEvents"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="accountsView">
+          <section class="panel">
+            <div class="section-heading">
+              <h3>アカウント一覧</h3>
+              <div class="filter-row">
+                <input id="accountSearch" type="search" placeholder="メール・サービスで検索" />
+                <select id="statusFilter">
+                  <option value="all">すべて</option>
+                  <option value="ready">未制限</option>
+                  <option value="auto_ready">自動解除済み</option>
+                  <option value="limited">制限中</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>アカウント</th>
+                    <th>サービス</th>
+                    <th>状態</th>
+                    <th>解除予定</th>
+                    <th>残り</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="eventsView">
+          <section class="panel">
+            <div class="section-heading">
+              <h3>履歴ログ</h3>
+              <input id="eventSearch" type="search" placeholder="履歴を検索" />
+            </div>
+            <div class="event-list" id="eventsList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="settingsView">
+          <section class="panel settings-panel">
+            <div class="section-heading"><h3>GitHub接続</h3></div>
+            <form class="settings-form" id="settingsForm">
+              <label>Owner<input id="githubOwner" autocomplete="off" placeholder="shihuiarenjinba-png" required /></label>
+              <label>Data repo<input id="githubRepo" autocomplete="off" placeholder="AI-keeper" required /></label>
+              <label>Branch<input id="githubBranch" autocomplete="off" placeholder="main" required /></label>
+              <label>Fine-grained token<input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_..." /></label>
+              <div class="toggle-line">
+                <input id="rememberToken" type="checkbox" />
+                <label for="rememberToken">このブラウザにトークンを保存する</label>
+              </div>
+              <div class="form-actions">
+                <button class="primary-button" type="submit">接続して保存</button>
+                <button class="ghost-button" id="clearToken" type="button">トークン削除</button>
+                <button class="ghost-button" id="initializeData" type="button">データファイル初期化</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="modal" id="accountModal">
+      <form method="dialog" class="modal-card" id="accountForm">
+        <div class="modal-header">
+          <div><p class="eyebrow">Account</p><h3 id="accountModalTitle">アカウント追加</h3></div>
+          <button class="icon-button" type="button" id="closeAccountModal">×</button>
+        </div>
+        <input id="accountId" type="hidden" />
+        <label>メールアドレス<input id="accountEmail" type="email" autocomplete="off" placeholder="name@example.com" required /></label>
+        <label>表示名<input id="accountLabel" autocomplete="off" placeholder="Codex Main" /></label>
+        <div class="two-column">
+          <label>サービス<select id="accountService"><option>Codex</option><option>ChatGPT</option><option>Claude</option><option>Cursor</option><option>Gemini</option><option>Other</option></select></label>
+          <label>プラン<input id="accountPlan" autocomplete="off" placeholder="Pro" /></label>
+        </div>
+        <label>メモ<textarea id="accountNotes" rows="3" placeholder="使い分けや注意点"></textarea></label>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" id="cancelAccount">キャンセル</button>
+          <button class="primary-button" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="limitModal">
+      <form method="dialog" class="modal-card" id="limitForm">
+        <div class="modal-header">
+          <div><p class="eyebrow">7-Day Limit</p><h3>制限開始</h3></div>
+          <button class="icon-button" type="button" id="closeLimitModal">×</button>
+        </div>
+        <input id="limitAccountId" type="hidden" />
+        <div class="limit-preview" id="limitPreview"></div>
+        <label>メモ<textarea id="limitNote" rows="3" placeholder="例: Codex weekly limit"></textarea></label>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" id="cancelLimit">キャンセル</button>
+          <button class="danger-button" type="submit">7日制限として記録</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

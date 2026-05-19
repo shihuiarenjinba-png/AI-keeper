@@ -1,0 +1,24 @@
+{
+  "services": [
+    {
+      "name": "Codex",
+      "defaultLimitDurationDays": 7
+    },
+    {
+      "name": "ChatGPT",
+      "defaultLimitDurationDays": 7
+    },
+    {
+      "name": "Claude",
+      "defaultLimitDurationDays": 7
+    },
+    {
+      "name": "Cursor",
+      "defaultLimitDurationDays": 7
+    },
+    {
+      "name": "Gemini",
+      "defaultLimitDurationDays": 7
+    }
+  ]
+}
