@@ -2,13 +2,36 @@
 
 ローカルPCで使う **Streamlit UI** 版です。
 
-ログイン、アカウント接続、クラウド連携はありません。ブラウザはローカルUIを表示するためだけに使います。
+ログイン、アカウント接続、クラウド連携はありません。画面はブラウザに表示されますが、ローカル起動時の処理はそのPC上で実行されます。
 
-## 重要: 更新方式
+## 重要: 2つの画面モード
 
-この版は、**指定したローカルExcelファイルそのものを更新**します。
+### ローカル更新
 
-処理の流れ:
+実運用はこちらです。
+
+画面は常に次の4ステップを表示します。
+
+1. **CSVを選択**
+2. **更新するExcelを選択**
+3. **事前チェックを実行**
+4. **このExcelを更新する**
+
+「事前チェック」と「更新実行」のボタンは最初から表示されます。条件が不足している場合はグレーアウトし、何が不足しているかを画面に表示します。
+
+CSVとExcelはOS標準の「参照」ダイアログ、またはパス入力で指定します。
+
+更新対象Excelはアップロードコピーではありません。**指定した実ファイルそのものを更新**します。
+
+### ブラウザ確認用
+
+相手にUIを見せるための確認用です。
+
+CSVとExcelをアップロードできますが、GitHubやクラウド上で動いている画面から、利用者PC上の元Excelを直接更新することはできません。
+
+したがって、実際の更新テスト・本番運用は必ず「ローカル更新」タブで行います。
+
+## 更新処理の流れ
 
 1. CSVを選択
 2. 更新対象Excelの実ファイルを選択
@@ -18,24 +41,11 @@
 6. 数式・転記値を検証
 7. すべて合格した場合だけ、指定したExcelと同じパスを安全に置換
 
-つまり、ダウンロードした別ファイルを手作業で戻す運用ではありません。
-
-## 操作
-
-1. 「転記するCSV」を選択
-2. 「更新するExcel」で `参照…` を押すか、Excelのパスを入力
-3. `事前チェックを実行`
-4. 内容を確認
-5. `更新対象とCSV内容を確認しました` にチェック
-6. `Excelを安全に更新`
-
-処理完了後、選択したExcelファイル自体が更新されています。
+ダウンロードした別ファイルを手作業で戻す運用ではありません。
 
 ## バックアップ
 
 更新前の原本は、更新対象Excelと同じフォルダに自動作成される `_backup` フォルダへ保存します。
-
-例:
 
 ```text
 Documents/
@@ -70,7 +80,7 @@ Documents/
 - macOS
 - Linux
 - Python 3.10+
-- ブラウザ（Streamlitのローカル画面表示用）
+- ブラウザ（Streamlitの画面表示用）
 
 Microsoft Excel本体は処理時には不要です。
 
@@ -82,7 +92,7 @@ Microsoft Excel本体は処理時には不要です。
 
 `.xls` / `.xlsb` は対象外です。
 
-## 起動
+## ローカル起動
 
 ### Windows
 
@@ -101,11 +111,14 @@ run.bat
 ### macOS
 
 ```bash
+cd /Users/ユーザー名/Downloads/excel_csv_safe_transfer
 python3 -m pip install -r requirements.txt
 python3 -m streamlit run app.py
 ```
 
 または `setup_local.command` → `run_local.command` を利用できます。
+
+起動後、通常は `localhost` のStreamlit画面がブラウザで開きます。**ローカル起動でもUIは同じStreamlit画面です。** 違うのは、処理するPythonがローカルPC上にいるため、そのPCの実ファイルを更新できる点です。
 
 ## 数式保護
 
@@ -134,6 +147,20 @@ python3 -m streamlit run app.py
 
 VBAは `keep_vba=True` で保持する設定です。ただし、ActiveX、特殊アドイン、Power Query、外部接続などを含む実ファイルでは、本番前に追加検証してください。
 
+## テスト
+
+`tests/test_ui_logic.py` では、ボタン状態を次のケースで確認します。
+
+- 未選択
+- CSVのみ
+- Excelのみ
+- CSV + Excel
+- 事前チェック済み
+- 確認済み
+- 不正な拡張子
+
+また、テストExcel A/Bについて9月→10月→11月→12月の4回連続同一パス更新を確認しています。
+
 ## ファイル構成
 
 ```text
@@ -146,12 +173,13 @@ excel_csv_safe_transfer/
 ├─ setup_local.command
 ├─ run_local.command
 ├─ README.md
+├─ tests/
+│  └─ test_ui_logic.py
 └─ transfer/
    ├─ __init__.py
    ├─ config.py
    ├─ csv_loader.py
    ├─ workbook_engine.py
-   └─ local_workbook_engine.py
+   ├─ local_workbook_engine.py
+   └─ ui_logic.py
 ```
-
-`workbook_engine.py` が数式・値の検証を担当し、`local_workbook_engine.py` がバックアップと同一パス更新を担当します。
