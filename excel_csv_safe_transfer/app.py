@@ -8,7 +8,8 @@ import streamlit as st
 
 from transfer.config import AppConfig
 from transfer.csv_loader import load_csv
-from transfer.workbook_engine import WorkbookEngine, PreflightReport, file_sha256
+from transfer.workbook_engine import PreflightReport
+from transfer.local_workbook_engine import LocalWorkbookEngine, file_sha256
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -163,7 +164,7 @@ else:
             with st.spinner("CSV・Excel・数式・重複を確認しています…"):
                 config = _load_config(config_upload)
                 csv_data = _load_csv_upload(csv_upload, config)
-                engine = WorkbookEngine(config)
+                engine = LocalWorkbookEngine(config)
                 path = Path(excel_path).expanduser().resolve()
                 st.session_state["preflight"] = engine.preflight_file(csv_data, path)
                 st.session_state["preflight_excel_sha"] = file_sha256(path)
@@ -215,7 +216,7 @@ if report:
             with st.spinner("バックアップ → 転記 → 数式照合 → 値照合 → 元Excel更新中…"):
                 config = _load_config(config_upload)
                 csv_data = _load_csv_upload(csv_upload, config)
-                engine = WorkbookEngine(config)
+                engine = LocalWorkbookEngine(config)
                 result = engine.process_in_place(
                     csv_data=csv_data,
                     excel_path=excel_path,
