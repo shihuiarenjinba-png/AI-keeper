@@ -179,20 +179,15 @@ with mode_local:
         st.session_state["confirmed"] = False
 
     preflight_ok = st.session_state.get("preflight") is not None
-    confirmed = st.checkbox(
-        "更新対象ExcelとCSVを確認しました",
-        key="confirmed",
-        disabled=not preflight_ok,
-    )
-    state = build_local_ui_state(csv_path, excel_path, preflight_ok, confirmed)
+    preflight_state = build_local_ui_state(csv_path, excel_path, preflight_ok, False)
 
     st.markdown('<div class="step"><div class="step-title">3. 事前チェック</div>', unsafe_allow_html=True)
-    st.caption(state.preflight_hint)
+    st.caption(preflight_state.preflight_hint)
     if st.button(
         "事前チェックを実行",
         type="primary",
         use_container_width=True,
-        disabled=not state.can_preflight,
+        disabled=not preflight_state.can_preflight,
         key="preflight_button",
     ):
         try:
@@ -232,15 +227,20 @@ with mode_local:
             st.warning(warning)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    state = build_local_ui_state(csv_path, excel_path, report is not None, confirmed)
     st.markdown('<div class="step"><div class="step-title">4. 更新を実行</div>', unsafe_allow_html=True)
-    st.caption(state.execute_hint)
+    confirmed = st.checkbox(
+        "更新対象ExcelとCSVを確認しました",
+        key="confirmed",
+        disabled=report is None,
+    )
+    execute_state = build_local_ui_state(csv_path, excel_path, report is not None, confirmed)
+    st.caption(execute_state.execute_hint)
     st.warning("実行前に原本を `_backup` フォルダへ自動保存します。検証に失敗した場合、元Excelは更新しません。")
     if st.button(
         "このExcelを更新する",
         type="primary",
         use_container_width=True,
-        disabled=not state.can_execute,
+        disabled=not execute_state.can_execute,
         key="execute_button",
     ):
         try:
