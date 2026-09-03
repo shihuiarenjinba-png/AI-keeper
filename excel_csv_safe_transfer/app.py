@@ -1,214 +1,227 @@
 from __future__ import annotations
 
-import threading
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+import hashlib
+import tempfile
 from pathlib import Path
 
-from transfer.service import PreflightPlan, TransferService
+import streamlit as st
+
+from transfer.config import AppConfig
+from transfer.csv_loader import load_csv
+from transfer.workbook_engine import WorkbookEngine, PreflightReport
 
 
-class SafeTransferApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("CSV → Excel 安全転記")
-        self.geometry("900x700")
-        self.minsize(780, 620)
+APP_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = APP_DIR / "config_example.json"
 
-        self.service = TransferService()
-        self.plan: PreflightPlan | None = None
 
-        self.csv_var = tk.StringVar()
-        self.excel_var = tk.StringVar()
-        self.config_var = tk.StringVar(
-            value=str((Path(__file__).parent / "config_example.json").resolve())
-        )
-        self.status_var = tk.StringVar(value="ファイルを選択してください。")
+st.set_page_config(
+    page_title="CSV → Excel 安全転記",
+    page_icon="📄",
+    layout="centered",
+)
 
-        self._build_ui()
+st.markdown(
+    """
+    <style>
+      .block-container {max-width: 980px; padding-top: 2rem; padding-bottom: 3rem;}
+      .hero {
+        padding: 1.35rem 1.5rem;
+        border: 1px solid rgba(128,128,128,.25);
+        border-radius: 16px;
+        margin-bottom: 1.25rem;
+      }
+      .hero h1 {font-size: 2rem; margin: 0 0 .35rem 0;}
+      .hero p {margin: 0; opacity: .78;}
+      .step-title {font-weight: 700; font-size: 1.05rem; margin-bottom: .35rem;}
+      div[data-testid="stMetric"] {
+        border: 1px solid rgba(128,128,128,.22);
+        border-radius: 12px;
+        padding: .75rem 1rem;
+      }
+      .okbox {
+        border: 1px solid rgba(50,170,90,.35);
+        border-radius: 12px;
+        padding: .9rem 1rem;
+        margin: .5rem 0 1rem 0;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-    def _build_ui(self):
-        main = ttk.Frame(self, padding=16)
-        main.pack(fill="both", expand=True)
+st.markdown(
+    """
+    <div class="hero">
+      <h1>CSV → Excel 安全転記</h1>
+      <p>CSVと元Excelを選ぶだけ。元ファイルは上書きせず、数式を確認して転記済みExcelを作成します。</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-        title = ttk.Label(main, text="CSV → Excel 安全転記", font=("", 18, "bold"))
-        title.pack(anchor="w", pady=(0, 14))
 
-        note = ttk.Label(
-            main,
-            text=(
-                "原本Excelへ直接書き込まず、コピーで転記・数式照合・値照合を行い、"
-                "全検査合格時だけ原本を更新します。"
-            ),
-            wraplength=820,
-        )
-        note.pack(anchor="w", pady=(0, 14))
+def _uploaded_hash(uploaded) -> str:
+    if uploaded is None:
+        return ""
+    return hashlib.sha256(uploaded.getvalue()).hexdigest()
 
-        form = ttk.Frame(main)
-        form.pack(fill="x")
-        self._file_row(
-            form, 0, "CSVファイル", self.csv_var,
-            lambda: self._browse_file(self.csv_var, [("CSV", "*.csv"), ("すべて", "*.*")]),
-        )
-        self._file_row(
-            form, 1, "転記先Excel", self.excel_var,
-            lambda: self._browse_file(
-                self.excel_var,
-                [("Excel", "*.xlsx *.xlsm *.xlsb *.xls"), ("すべて", "*.*")],
-            ),
-        )
-        self._file_row(
-            form, 2, "設定ファイル", self.config_var,
-            lambda: self._browse_file(self.config_var, [("JSON", "*.json"), ("すべて", "*.*")]),
-        )
-        form.columnconfigure(1, weight=1)
 
-        actions = ttk.Frame(main)
-        actions.pack(fill="x", pady=14)
-        self.preflight_btn = ttk.Button(actions, text="① 事前検査", command=self._start_preflight)
-        self.preflight_btn.pack(side="left")
-        self.execute_btn = ttk.Button(
-            actions, text="② 転記実行", command=self._confirm_execute, state="disabled"
-        )
-        self.execute_btn.pack(side="left", padx=(10, 0))
-        self.status_label = ttk.Label(actions, textvariable=self.status_var)
-        self.status_label.pack(side="left", padx=(18, 0))
+def _load_config(config_upload) -> AppConfig:
+    if config_upload is None:
+        return AppConfig.load(DEFAULT_CONFIG_PATH)
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        tmp.write(config_upload.getvalue())
+        tmp_path = Path(tmp.name)
+    try:
+        return AppConfig.load(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
-        ttk.Separator(main).pack(fill="x", pady=(0, 12))
-        ttk.Label(main, text="検査・処理結果", font=("", 11, "bold")).pack(anchor="w")
-        self.output = tk.Text(main, wrap="word", height=26)
-        self.output.pack(fill="both", expand=True, pady=(6, 0))
-        self.output.configure(state="disabled")
 
-    def _file_row(self, parent, row, label, var, command):
-        ttk.Label(parent, text=label, width=14).grid(row=row, column=0, sticky="w", pady=5)
-        entry = ttk.Entry(parent, textvariable=var)
-        entry.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=5)
-        entry.bind("<KeyRelease>", lambda _e: self._invalidate_plan())
-        ttk.Button(parent, text="選択", command=command).grid(row=row, column=2, pady=5)
+def _run_preflight(csv_upload, excel_upload, config_upload) -> PreflightReport:
+    config = _load_config(config_upload)
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        csv_path = td_path / csv_upload.name
+        csv_path.write_bytes(csv_upload.getvalue())
+        csv_data = load_csv(csv_path, config)
 
-    def _browse_file(self, var: tk.StringVar, filetypes):
-        path = filedialog.askopenfilename(filetypes=filetypes)
-        if path:
-            var.set(path)
-            self._invalidate_plan()
+    engine = WorkbookEngine(config)
+    return engine.preflight(
+        csv_data=csv_data,
+        workbook_bytes=excel_upload.getvalue(),
+        workbook_name=excel_upload.name,
+    )
 
-    def _invalidate_plan(self):
-        self.plan = None
-        self.execute_btn.configure(state="disabled")
-        self.status_var.set("事前検査が必要です。")
 
-    def _set_output(self, text: str):
-        self.output.configure(state="normal")
-        self.output.delete("1.0", "end")
-        self.output.insert("1.0", text)
-        self.output.configure(state="disabled")
+def _make_output(csv_upload, excel_upload, config_upload):
+    config = _load_config(config_upload)
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        csv_path = td_path / csv_upload.name
+        csv_path.write_bytes(csv_upload.getvalue())
+        csv_data = load_csv(csv_path, config)
 
-    def _append_output(self, text: str):
-        self.output.configure(state="normal")
-        self.output.insert("end", text)
-        self.output.see("end")
-        self.output.configure(state="disabled")
+    engine = WorkbookEngine(config)
+    return engine.process(
+        csv_data=csv_data,
+        workbook_bytes=excel_upload.getvalue(),
+        workbook_name=excel_upload.name,
+    )
 
-    def _set_busy(self, busy: bool, message: str):
-        self.status_var.set(message)
-        self.preflight_btn.configure(state="disabled" if busy else "normal")
-        if busy:
-            self.execute_btn.configure(state="disabled")
-        elif self.plan is not None:
-            self.execute_btn.configure(state="normal")
 
-    def _validate_paths(self) -> bool:
-        if not self.csv_var.get().strip():
-            messagebox.showerror("入力不足", "CSVファイルを選択してください。")
-            return False
-        if not self.excel_var.get().strip():
-            messagebox.showerror("入力不足", "転記先Excelを選択してください。")
-            return False
-        if not self.config_var.get().strip():
-            messagebox.showerror("入力不足", "設定ファイルを選択してください。")
-            return False
-        return True
+st.markdown('<div class="step-title">1. ファイルを選択</div>', unsafe_allow_html=True)
+left, right = st.columns(2)
+with left:
+    csv_upload = st.file_uploader(
+        "転記するCSV",
+        type=["csv"],
+        help="今回追加する月のCSVを選択してください。",
+    )
+with right:
+    excel_upload = st.file_uploader(
+        "元になるExcel",
+        type=["xlsx", "xlsm"],
+        help="数式が入っている元Excelを選択してください。元ファイル自体は変更しません。",
+    )
 
-    def _start_preflight(self):
-        if not self._validate_paths():
-            return
-        self.plan = None
-        self._set_output("事前検査中です...\n")
-        self._set_busy(True, "事前検査中")
-        threading.Thread(target=self._preflight_worker, daemon=True).start()
+with st.expander("詳細設定（通常は触らなくて大丈夫です）"):
+    st.caption(
+        "年度が変わって列位置やシート名が変わった場合だけ設定JSONを差し替えます。"
+        "未指定の場合は config_example.json を使います。"
+    )
+    config_upload = st.file_uploader(
+        "転記設定JSON（任意）",
+        type=["json"],
+        label_visibility="collapsed",
+    )
 
-    def _preflight_worker(self):
+current_signature = "|".join(
+    [
+        _uploaded_hash(csv_upload),
+        _uploaded_hash(excel_upload),
+        _uploaded_hash(config_upload),
+    ]
+)
+if st.session_state.get("input_signature") != current_signature:
+    st.session_state["input_signature"] = current_signature
+    st.session_state.pop("preflight", None)
+    st.session_state.pop("output_bytes", None)
+    st.session_state.pop("output_name", None)
+    st.session_state.pop("output_result", None)
+
+st.markdown('<div class="step-title">2. 事前チェック</div>', unsafe_allow_html=True)
+
+if not csv_upload or not excel_upload:
+    st.info("CSVとExcelの2ファイルを選択すると、事前チェックを実行できます。")
+else:
+    if st.button("事前チェックを実行", type="primary", use_container_width=True):
         try:
-            plan = self.service.preflight(
-                self.csv_var.get(), self.excel_var.get(), self.config_var.get()
-            )
-            self.after(0, lambda: self._preflight_success(plan))
-        except Exception as e:
-            self.after(0, lambda: self._operation_failed("事前検査エラー", e))
+            with st.spinner("CSV・Excel・数式・重複を確認しています…"):
+                st.session_state["preflight"] = _run_preflight(
+                    csv_upload, excel_upload, config_upload
+                )
+        except Exception as exc:
+            st.session_state.pop("preflight", None)
+            st.error(f"事前チェックで停止しました：{exc}")
 
-    def _preflight_success(self, plan: PreflightPlan):
-        self.plan = plan
-        self._set_output(plan.summary_text())
-        self._set_busy(False, "事前検査 OK")
-        self.execute_btn.configure(state="normal")
+report: PreflightReport | None = st.session_state.get("preflight")
 
-    def _confirm_execute(self):
-        if self.plan is None:
-            messagebox.showerror("事前検査", "先に事前検査を実行してください。")
-            return
+if report:
+    st.success("事前チェックに合格しました。")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("追加件数", f"{report.record_count:,}")
+    c2.metric("対象年度", f"{report.fiscal_year}年度")
+    c3.metric("転記開始行", f"{report.target_start_row}")
+    c4.metric("保護数式", f"{report.formula_count:,}")
 
-        msg = (
-            "以下の内容で転記します。\n\n"
-            f"対象年度: {self.plan.fiscal_year}年度\n"
-            f"CSV期間: {self.plan.min_date} ～ {self.plan.max_date}\n"
-            f"件数: {self.plan.record_count:,}件\n"
-            f"転記行: {self.plan.target_start_row} ～ {self.plan.target_end_row}\n\n"
-            "原本Excelはバックアップ後、コピー上で検証し、"
-            "数式・値の照合がすべて合格した場合のみ更新します。\n\n"
-            "実行しますか？"
-        )
-        if not messagebox.askyesno("転記実行確認", msg):
-            return
+    st.markdown(
+        f"""
+        <div class="okbox">
+          <b>CSV期間</b>：{report.min_date} ～ {report.max_date}<br>
+          <b>Excel既存最終日</b>：{report.existing_last_date or "データなし"}<br>
+          <b>転記予定行</b>：{report.target_start_row} ～ {report.target_end_row}<br>
+          <b>確認</b>：既存値への上書きなし / 数式セルへの書込みなし / 重複なし
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        self._append_output("\n転記処理を開始します...\n")
-        self._set_busy(True, "転記・検証中")
-        threading.Thread(target=self._execute_worker, daemon=True).start()
+    for warning in report.warnings:
+        st.warning(warning)
 
-    def _execute_worker(self):
+    st.markdown('<div class="step-title">3. 転記済みExcelを作成</div>', unsafe_allow_html=True)
+    st.caption("元Excelは変更しません。検証済みの新しいExcelファイルを作ります。")
+
+    if st.button("転記済みExcelを作成", type="primary", use_container_width=True):
         try:
-            assert self.plan is not None
-            result = self.service.execute(self.plan)
-            self.after(0, lambda: self._execute_success(result))
-        except Exception as e:
-            self.after(0, lambda: self._operation_failed("転記エラー", e))
+            with st.spinner("転記 → 保存 → 再読込 → 数式再照合を行っています…"):
+                result = _make_output(csv_upload, excel_upload, config_upload)
+                st.session_state["output_bytes"] = result.workbook_bytes
+                st.session_state["output_name"] = result.output_name
+                st.session_state["output_result"] = result
+        except Exception as exc:
+            st.session_state.pop("output_bytes", None)
+            st.error(f"転記処理を停止しました：{exc}")
 
-    def _execute_success(self, result):
-        text = (
-            "\n【転記完了】\n"
-            f"追加件数　　　: {result['record_count']:,} 件\n"
-            f"転記行　　　　: {result['target_start_row']} ～ {result['target_end_row']}\n"
-            f"数式保護確認　: {result['formula_count']:,} セル OK\n"
-            f"バックアップ　: {result['backup_path']}\n"
-            f"処理ログ　　　: {result['log_path']}\n\n"
-            "全検査に合格し、原本Excelを更新しました。\n"
-        )
-        self._append_output(text)
-        self.plan = None
-        self._set_busy(False, "正常終了")
-        self.execute_btn.configure(state="disabled")
-        messagebox.showinfo("完了", "転記と検証が正常に完了しました。")
+if st.session_state.get("output_bytes"):
+    result = st.session_state["output_result"]
+    st.success(
+        f"転記完了：{result.record_count:,}件を追加し、"
+        f"{result.formula_count:,}個の数式が変更されていないことを確認しました。"
+    )
+    st.download_button(
+        "転記済みExcelを保存",
+        data=st.session_state["output_bytes"],
+        file_name=st.session_state["output_name"],
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        use_container_width=True,
+    )
 
-    def _operation_failed(self, title: str, error: Exception):
-        self.plan = None
-        self._set_busy(False, "停止")
-        self.execute_btn.configure(state="disabled")
-        self._set_output(
-            f"【{title}】\n\n{error}\n\n安全のため原本Excelへの更新は行っていません。"
-        )
-        messagebox.showerror(title, str(error))
-
-
-if __name__ == "__main__":
-    app = SafeTransferApp()
-    app.mainloop()
+st.divider()
+st.caption(
+    "ローカル利用前提です。ログイン・アカウント接続・クラウド連携はありません。"
+    "対応形式は .xlsx / .xlsm です。特殊なマクロ・外部接続・アドインを含むブックは本番前に実ファイルで検証してください。"
+)
