@@ -3,3 +3,12 @@ node_modules/
 dist/
 .env
 .env.*
+
+# Local data / generated workbooks
+*.csv
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+_backup/
+work/
