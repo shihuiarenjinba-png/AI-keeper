@@ -1,0 +1,48 @@
+{
+  "sheet_name": "入力",
+  "data_start_row": 5,
+  "data_end_row": 5000,
+  "date_csv_header": "日付",
+  "date_excel_column": "A",
+  "key_csv_headers": [
+    "日付",
+    "伝票番号"
+  ],
+  "fiscal_year_start_month": 4,
+  "require_date_ascending": true,
+  "require_strictly_after_last_date": true,
+  "workbook_fiscal_year_cell": "B2",
+  "date_formats": [
+    "%Y/%m/%d",
+    "%Y-%m-%d",
+    "%Y%m%d"
+  ],
+  "backup_subfolder": "_backup",
+  "log_subfolder": "_logs",
+  "columns": [
+    {
+      "csv_header": "日付",
+      "excel_column": "A",
+      "type": "date",
+      "required": true
+    },
+    {
+      "csv_header": "伝票番号",
+      "excel_column": "B",
+      "type": "text",
+      "required": true
+    },
+    {
+      "csv_header": "数量",
+      "excel_column": "C",
+      "type": "number",
+      "required": true
+    },
+    {
+      "csv_header": "金額",
+      "excel_column": "D",
+      "type": "number",
+      "required": true
+    }
+  ]
+}
