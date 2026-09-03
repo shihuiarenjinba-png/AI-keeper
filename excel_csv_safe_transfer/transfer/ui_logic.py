@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -41,16 +42,28 @@ class LocalUiState:
         return "更新実行できます。"
 
 
+def _valid_csv_paths(csv_paths: str | Iterable[str]) -> bool:
+    if isinstance(csv_paths, str):
+        paths = [csv_paths] if csv_paths else []
+    else:
+        paths = [p for p in csv_paths if p]
+    if not paths:
+        return False
+    return all(
+        Path(p).expanduser().is_file() and Path(p).suffix.lower() == ".csv"
+        for p in paths
+    )
+
+
 def build_local_ui_state(
-    csv_path: str,
+    csv_paths: str | Iterable[str],
     excel_path: str,
     preflight_ok: bool,
     confirmed: bool,
 ) -> LocalUiState:
-    csv = Path(csv_path).expanduser() if csv_path else None
     excel = Path(excel_path).expanduser() if excel_path else None
     return LocalUiState(
-        csv_ok=bool(csv and csv.is_file() and csv.suffix.lower() == ".csv"),
+        csv_ok=_valid_csv_paths(csv_paths),
         excel_ok=bool(
             excel
             and excel.is_file()
