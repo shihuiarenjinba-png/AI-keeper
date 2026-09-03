@@ -1,47 +1,100 @@
 # CSV → Excel 安全転記システム
 
-既存Excelの**数式を変更せず**、許可した入力列へCSVの値だけを追記するWindows向けツールです。
+ローカルPCで使う **Streamlit UI** 版です。
 
-## 安全設計
-
-- 原本Excelへ直接書き込まず、まずバックアップと一時コピーを作成
-- 転記先セルに数式があれば即停止
-- 転記前後・保存後に全シートの数式を比較
-- 既存値への上書きを禁止
-- 行不足時に自動で行挿入せず停止
-- CSV内とExcel既存データの重複キーを検出
-- CSV・Excel・設定JSONをSHA-256で再確認
-- Excelイベント、外部リンク更新、自動マクロ実行を抑制
-- 成功・失敗とも処理ログを保存
-
-## 前提
-
-- Windows
-- Microsoft Excel がインストール済み
-- Python 3
-- pywin32
-
-初回は `setup.bat`、通常起動は `run.bat` を使用します。
+ログイン、アカウント接続、クラウド連携はありません。  
+ブラウザはローカルUIを表示するためだけに使います。
 
 ## 操作
 
-1. CSVファイルを選択
-2. 転記先Excelを選択
-3. 設定JSONを選択
-4. `① 事前検査`
-5. 内容を確認
-6. `② 転記実行`
+通常の利用者が触るのは次の3ステップだけです。
 
-## 年度管理
+1. CSVを選択
+2. 元Excelを選択
+3. 事前チェック → 転記済みExcelを作成 → 保存
 
-`fiscal_year_start_month: 4` の場合、2026/04/01～2027/03/31を2026年度として扱います。
-CSV内に複数年度が混在している場合は停止します。
+元Excelは**上書きしません**。  
+転記後のExcelは別ファイルとしてダウンロードします。
 
-## 翌年度のレイアウト変更
+## 対応環境
 
-年度ごとに設定JSONを分けることで、コード本体を変えずに転記先列を変更できます。
+- Windows
+- macOS
+- Linux
+- Python 3.10+
+- ブラウザ（Streamlitのローカル画面表示用）
 
-例:
+Microsoft Excel本体は処理時には不要です。
+
+対応ファイル:
+
+- `.xlsx`
+- `.xlsm`（VBA保持モード。特殊機能は実ファイル検証推奨）
+- `.csv`
+
+`.xls` / `.xlsb` は対象外です。
+
+## 起動
+
+### Windows
+
+初回:
+
+```text
+setup.bat
+```
+
+通常:
+
+```text
+run.bat
+```
+
+### macOS
+
+初回:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m streamlit run app.py
+```
+
+または `setup_local.command` → `run_local.command` を利用できます。
+
+起動すると通常はブラウザでローカル画面が開きます。
+
+## UI方針
+
+メイン画面には以下だけを表示します。
+
+- CSVアップロード
+- Excelアップロード
+- 事前チェック
+- 転記済みExcel作成
+- Excel保存
+
+年度変更などで列位置が変わった場合の設定JSONは
+**「詳細設定」内に隠しています**。
+
+アカウント、ログイン、接続先、クラウド認証などはありません。
+
+## 数式保護
+
+転記前に全シートの数式を取得し、次のタイミングで比較します。
+
+1. 転記直後
+2. 保存後にExcelファイルを再読込した後
+
+1セルでも数式の追加・削除・変更を検出した場合は
+完成ファイルを出力しません。
+
+さらに、転記対象セルに既存の値または数式がある場合も停止します。
+
+## 追記ルール
+
+`config_example.json` の設定を利用します。
+
+主な設定:
 
 ```json
 {
@@ -51,28 +104,44 @@ CSV内に複数年度が混在している場合は停止します。
   "date_csv_header": "日付",
   "date_excel_column": "A",
   "key_csv_headers": ["日付", "伝票番号"],
-  "fiscal_year_start_month": 4,
-  "workbook_fiscal_year_cell": "B2",
-  "columns": [
-    {"csv_header": "日付", "excel_column": "A", "type": "date", "required": true},
-    {"csv_header": "伝票番号", "excel_column": "B", "type": "text", "required": true},
-    {"csv_header": "数量", "excel_column": "C", "type": "number", "required": true},
-    {"csv_header": "金額", "excel_column": "D", "type": "number", "required": true}
-  ]
+  "fiscal_year_start_month": 4
 }
 ```
 
-## 数式保護について
+4月開始の場合:
 
-最も安全なのは、Excel側に年間分の入力行と数式列をあらかじめ用意しておく運用です。
-このツールは `columns` に指定した列だけへ値を書き込み、それ以外の列には触れません。
-さらに全数式を転記前後で照合し、1セルでも追加・削除・変更があれば原本Excelを更新しません。
+- 2026/04/01 ～ 2027/03/31 → 2026年度
 
-## 注意
+Excel最終日より前の日付を含むCSVは、重複・上書き防止のため停止します。
 
-- 15桁を超えるIDは `number` ではなく `text` にしてください。
-- パスワード付きExcel、特殊アドイン、共同編集、OneDrive/SharePoint同期中のファイルは本番前に追加検証してください。
-- 本番導入前に、必ず実ファイルのコピーで4月～直近月まで通しテストしてください。
+## 翌年度にレイアウトが変わる場合
+
+設定JSONだけ差し替えられます。
+
+例:
+
+```json
+{
+  "csv_header": "金額",
+  "excel_column": "G",
+  "type": "number",
+  "required": true
+}
+```
+
+コード自体を変更せず、CSV列とExcel列の対応を変更できます。
+
+## 安全上の注意
+
+- 原本Excelは変更しません。
+- 自動で行挿入しません。
+- 既存セルを上書きしません。
+- CSV内の重複キーを検出します。
+- Excel既存データとの重複キーを検出します。
+- 全数式を転記前後で比較します。
+- 15桁を超えるIDは `number` ではなく `text` として設定してください。
+- `.xlsm` のVBAは保持する設定ですが、ActiveX、特殊アドイン、外部データ接続などを含むファイルは本番前に実ファイルで検証してください。
+- 本番導入前には、必ず実ファイルのコピーで4月から直近月まで通しテストしてください。
 
 ## ファイル構成
 
@@ -83,11 +152,15 @@ excel_csv_safe_transfer/
 ├─ requirements.txt
 ├─ setup.bat
 ├─ run.bat
+├─ setup_local.command
+├─ run_local.command
 ├─ README.md
 └─ transfer/
    ├─ __init__.py
    ├─ config.py
    ├─ csv_loader.py
-   ├─ excel_com.py
-   └─ service.py
+   └─ workbook_engine.py
 ```
+
+`excel_com.py` / `service.py` のWindows専用方式は廃止し、
+Streamlit + openpyxl のローカル処理方式へ変更しています。
