@@ -26,7 +26,6 @@ st.markdown(
       .hero p {margin:0;opacity:.78;}
       .step {padding:.9rem 1rem;border:1px solid rgba(128,128,128,.2);border-radius:14px;margin:.75rem 0;}
       .step-title {font-weight:750;font-size:1.08rem;margin-bottom:.35rem;}
-      .muted {opacity:.7;font-size:.92rem;}
       .okbox {border:1px solid rgba(50,170,90,.35);border-radius:12px;padding:.9rem 1rem;margin:.6rem 0;}
       div[data-testid="stMetric"] {border:1px solid rgba(128,128,128,.22);border-radius:12px;padding:.65rem .8rem;}
     </style>
@@ -56,7 +55,6 @@ def _choose_local_file(kind: str) -> str:
             root.attributes("-topmost", True)
         except Exception:
             pass
-
         if kind == "csv":
             selected = filedialog.askopenfilename(
                 title="転記するCSVを選択",
@@ -97,13 +95,6 @@ def _load_csv_from_path(csv_path: str, config: AppConfig):
     return load_csv(Path(csv_path).expanduser().resolve(), config)
 
 
-def _load_csv_upload(csv_upload, config: AppConfig):
-    with tempfile.TemporaryDirectory() as td:
-        path = Path(td) / csv_upload.name
-        path.write_bytes(csv_upload.getvalue())
-        return load_csv(path, config)
-
-
 for key in ("csv_path", "excel_path"):
     if key not in st.session_state:
         st.session_state[key] = ""
@@ -112,7 +103,7 @@ mode_local, mode_demo = st.tabs(["ローカル更新", "ブラウザ確認用"])
 
 with mode_local:
     st.info(
-        "実運用はこちらを使います。Streamlitの画面はブラウザに表示されますが、処理はこのPC上で動き、指定したExcel本体を更新します。"
+        "実運用はこちらを使います。画面はブラウザに表示されますが、処理はこのPC上で動き、指定したExcel本体を更新します。"
     )
 
     st.markdown('<div class="step"><div class="step-title">1. CSVを選択</div>', unsafe_allow_html=True)
@@ -212,7 +203,6 @@ with mode_local:
                 target = Path(excel_path).expanduser().resolve()
                 st.session_state["preflight"] = engine.preflight_file(csv_data, target)
                 st.session_state["preflight_excel_sha"] = file_sha256(target)
-                st.session_state["confirmed"] = False
             st.rerun()
         except Exception as exc:
             st.session_state.pop("preflight", None)
@@ -242,7 +232,6 @@ with mode_local:
             st.warning(warning)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # stateを最新のcheckbox状態でもう一度作る。
     state = build_local_ui_state(csv_path, excel_path, report is not None, confirmed)
     st.markdown('<div class="step"><div class="step-title">4. 更新を実行</div>', unsafe_allow_html=True)
     st.caption(state.execute_hint)
@@ -267,7 +256,6 @@ with mode_local:
                 st.session_state["done_result"] = result
                 st.session_state.pop("preflight", None)
                 st.session_state.pop("preflight_excel_sha", None)
-                st.session_state["confirmed"] = False
             st.rerun()
         except Exception as exc:
             st.error(f"更新処理を停止しました：{exc}")
