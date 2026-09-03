@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 import hashlib
 import os
@@ -9,7 +10,12 @@ import shutil
 import tempfile
 
 from .csv_loader import CsvData
-from .workbook_engine import WorkbookEngine, PreflightReport
+from .workbook_engine import (
+    WorkbookEngine,
+    PreflightReport,
+    _formula_snapshot,
+    _formula_diff,
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,39 @@ class LocalWorkbookEngine(WorkbookEngine):
         if not path.is_file():
             raise FileNotFoundError(f"Excelが見つかりません: {path}")
         return self.preflight(csv_data, path.read_bytes(), path.name)
+
+    def _mark_full_recalculation_on_open(
+        self,
+        workbook_bytes: bytes,
+        workbook_name: str,
+    ) -> bytes:
+        """数式を変更せず、Excelで開いたときに全再計算を要求する。"""
+        workbook = self._load(workbook_bytes, workbook_name)
+        try:
+            formulas_before = _formula_snapshot(workbook)
+            calculation = getattr(workbook, "calculation", None)
+            if calculation is not None:
+                calculation.fullCalcOnLoad = True
+                calculation.forceFullCalc = True
+
+            out = BytesIO()
+            workbook.save(out)
+            recalculation_bytes = out.getvalue()
+        finally:
+            workbook.close()
+
+        reopened = self._load(recalculation_bytes, workbook_name)
+        try:
+            formula_diff = _formula_diff(formulas_before, _formula_snapshot(reopened))
+            if formula_diff:
+                raise RuntimeError(
+                    "再計算設定の付与後に数式変更を検出しました。更新を中止します。\n"
+                    + "\n".join(formula_diff[:20])
+                )
+        finally:
+            reopened.close()
+
+        return recalculation_bytes
 
     def process_in_place(
         self,
@@ -72,6 +111,13 @@ class LocalWorkbookEngine(WorkbookEngine):
         # 既存エンジンで転記・数式照合・保存後の値照合まで全て実施する。
         result = self.process(csv_data, source_bytes, path.name)
 
+        # openpyxl 自体は数式を計算しないため、Excelで開いたときの全再計算を要求する。
+        # 数式文字列が変わっていないことを再度確認してから後続処理へ進む。
+        final_workbook_bytes = self._mark_full_recalculation_on_open(
+            result.workbook_bytes,
+            path.name,
+        )
+
         # 元ファイルはまだ触らず、先にバックアップを確定する。
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_dir = path.parent / "_backup"
@@ -90,10 +136,10 @@ class LocalWorkbookEngine(WorkbookEngine):
         temp_path = Path(temp_name)
 
         try:
-            temp_path.write_bytes(result.workbook_bytes)
+            temp_path.write_bytes(final_workbook_bytes)
 
             # ディスク書込み後のバイト列が検証済み出力と一致することを確認。
-            if temp_path.read_bytes() != result.workbook_bytes:
+            if temp_path.read_bytes() != final_workbook_bytes:
                 raise RuntimeError("一時Excelの書込み内容が検証済みデータと一致しません。")
 
             # 一時Excelが実際に再オープンできることも確認。
