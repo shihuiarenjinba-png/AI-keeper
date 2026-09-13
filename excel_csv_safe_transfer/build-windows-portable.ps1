@@ -12,8 +12,6 @@ if ($env:OS -ne "Windows_NT") {
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
-$Python = (Get-Command python -ErrorAction Stop).Source
-
 function Show-LauncherLog([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
         Write-Host "--- launcher diagnostic log ---"
@@ -22,15 +20,25 @@ function Show-LauncherLog([string]$Path) {
     }
 }
 
-Write-Host "[1/8] Installing runtime/build dependencies..."
+$BootstrapPython = (Get-Command python -ErrorAction Stop).Source
+$VenvDir = Join-Path $Root ".build-venv"
+$Python = Join-Path $VenvDir "Scripts\python.exe"
+
+Write-Host "[1/9] Preparing isolated build environment..."
+if (-not (Test-Path -LiteralPath $Python)) {
+    & $BootstrapPython -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0) { throw "Could not create the build virtual environment." }
+}
+
+Write-Host "[2/9] Installing runtime/build dependencies..."
 & $Python -m pip install --disable-pip-version-check -r "$Root\requirements.txt" -r "$Root\requirements-build.txt"
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 
-Write-Host "[2/8] Running unit tests..."
+Write-Host "[3/9] Running unit tests..."
 & $Python -m pytest -q "$Root\tests"
 if ($LASTEXITCODE -ne 0) { throw "Unit tests failed." }
 
-Write-Host "[3/8] Compiling Python sources..."
+Write-Host "[4/9] Compiling Python sources..."
 & $Python -m py_compile "$Root\app.py" "$Root\desktop_launcher.py"
 if ($LASTEXITCODE -ne 0) { throw "Python compile check failed." }
 
@@ -43,7 +51,7 @@ $PayloadDir = Join-Path $ReleaseRoot $PackageName
 $ZipPath = Join-Path $ReleaseRoot "$PackageName.zip"
 $ShaPath = "$ZipPath.sha256"
 
-Write-Host "[4/8] Building portable Windows app..."
+Write-Host "[5/9] Building portable Windows app..."
 Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force (Join-Path $DistDir $AppName) -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $PayloadDir -ErrorAction SilentlyContinue
@@ -76,7 +84,7 @@ if (-not (Test-Path $ExePath)) {
     throw "Built executable was not found: $ExePath"
 }
 
-Write-Host "[5/8] Starting local HTTP smoke test..."
+Write-Host "[6/9] Starting local HTTP smoke test..."
 $Port = Get-Random -Minimum 20000 -Maximum 45000
 $LauncherLog = Join-Path $env:TEMP ("SafeExcelTransfer-launcher-" + [guid]::NewGuid().ToString("N") + ".log")
 $PreviousLog = $env:OKINAWA_DESKTOP_LOG
@@ -126,7 +134,7 @@ finally {
     Remove-Item -LiteralPath $LauncherLog -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "[6/8] Creating portable ZIP..."
+Write-Host "[7/9] Creating portable ZIP..."
 New-Item -ItemType Directory -Force -Path $PayloadDir | Out-Null
 Copy-Item -Path (Join-Path $DistDir "$AppName\*") -Destination $PayloadDir -Recurse -Force
 Copy-Item -Path "$Root\README.md" -Destination (Join-Path $PayloadDir "README.md") -Force
@@ -140,11 +148,11 @@ Copy-Item -Path "$Root\README.md" -Destination (Join-Path $PayloadDir "README.md
 
 Compress-Archive -Path $PayloadDir -DestinationPath $ZipPath -CompressionLevel Optimal
 
-Write-Host "[7/8] Writing SHA-256..."
+Write-Host "[8/9] Writing SHA-256..."
 $Hash = (Get-FileHash -Algorithm SHA256 -Path $ZipPath).Hash.ToLowerInvariant()
 "$Hash  $([System.IO.Path]::GetFileName($ZipPath))" | Set-Content -Path $ShaPath -Encoding ASCII
 
-Write-Host "[8/8] Verifying the exact ZIP artifact..."
+Write-Host "[9/9] Verifying the exact ZIP artifact..."
 & "$Root\verify-windows-portable.ps1" -ZipPath $ZipPath
 
 Write-Host ""
