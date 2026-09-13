@@ -12,3 +12,9 @@ dist/
 *.xlsb
 _backup/
 work/
+
+# Safe Excel Transfer Windows portable build outputs
+excel_csv_safe_transfer/build/
+excel_csv_safe_transfer/dist/
+excel_csv_safe_transfer/release/
+excel_csv_safe_transfer/*.spec
