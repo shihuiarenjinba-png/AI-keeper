@@ -14,15 +14,15 @@ Set-Location $Root
 
 $Python = (Get-Command python -ErrorAction Stop).Source
 
-Write-Host "[1/7] Installing runtime/build dependencies..."
+Write-Host "[1/8] Installing runtime/build dependencies..."
 & $Python -m pip install --disable-pip-version-check -r "$Root\requirements.txt" -r "$Root\requirements-build.txt"
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 
-Write-Host "[2/7] Running unit tests..."
+Write-Host "[2/8] Running unit tests..."
 & $Python -m unittest discover -s "$Root\tests" -v
 if ($LASTEXITCODE -ne 0) { throw "Unit tests failed." }
 
-Write-Host "[3/7] Compiling Python sources..."
+Write-Host "[3/8] Compiling Python sources..."
 & $Python -m py_compile "$Root\app.py" "$Root\desktop_launcher.py"
 if ($LASTEXITCODE -ne 0) { throw "Python compile check failed." }
 
@@ -35,7 +35,7 @@ $PayloadDir = Join-Path $ReleaseRoot $PackageName
 $ZipPath = Join-Path $ReleaseRoot "$PackageName.zip"
 $ShaPath = "$ZipPath.sha256"
 
-Write-Host "[4/7] Building portable Windows app..."
+Write-Host "[4/8] Building portable Windows app..."
 Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force (Join-Path $DistDir $AppName) -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $PayloadDir -ErrorAction SilentlyContinue
@@ -65,7 +65,7 @@ if (-not (Test-Path $ExePath)) {
     throw "Built executable was not found: $ExePath"
 }
 
-Write-Host "[5/7] Starting local HTTP smoke test..."
+Write-Host "[5/8] Starting local HTTP smoke test..."
 $Port = Get-Random -Minimum 20000 -Maximum 45000
 $Process = Start-Process -FilePath $ExePath -ArgumentList @("--port", "$Port", "--no-browser") -PassThru
 try {
@@ -99,7 +99,7 @@ finally {
     }
 }
 
-Write-Host "[6/7] Creating portable ZIP..."
+Write-Host "[6/8] Creating portable ZIP..."
 New-Item -ItemType Directory -Force -Path $PayloadDir | Out-Null
 Copy-Item -Path (Join-Path $DistDir "$AppName\*") -Destination $PayloadDir -Recurse -Force
 Copy-Item -Path "$Root\README.md" -Destination (Join-Path $PayloadDir "README.md") -Force
@@ -113,9 +113,13 @@ Copy-Item -Path "$Root\README.md" -Destination (Join-Path $PayloadDir "README.md
 
 Compress-Archive -Path $PayloadDir -DestinationPath $ZipPath -CompressionLevel Optimal
 
-Write-Host "[7/7] Writing SHA-256..."
+Write-Host "[7/8] Writing SHA-256..."
 $Hash = (Get-FileHash -Algorithm SHA256 -Path $ZipPath).Hash.ToLowerInvariant()
 "$Hash  $([System.IO.Path]::GetFileName($ZipPath))" | Set-Content -Path $ShaPath -Encoding ASCII
+
+Write-Host "[8/8] Verifying the exact ZIP artifact..."
+& "$Root\verify-windows-portable.ps1" -ZipPath $ZipPath
+if ($LASTEXITCODE -ne 0) { throw "ZIP verification failed." }
 
 Write-Host ""
 Write-Host "BUILD PASS"
