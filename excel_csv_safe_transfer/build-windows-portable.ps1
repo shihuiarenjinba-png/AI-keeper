@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-if (-not $IsWindows) {
+if ($env:OS -ne "Windows_NT") {
     throw "This build script must run on Windows."
 }
 
@@ -43,18 +43,21 @@ Remove-Item -Force $ZipPath -ErrorAction SilentlyContinue
 Remove-Item -Force $ShaPath -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 
-& $Python -m PyInstaller `
-    --noconfirm `
-    --clean `
-    --onedir `
-    --windowed `
-    --name $AppName `
-    --collect-all streamlit `
-    --collect-all openpyxl `
-    --add-data "$Root\app.py;." `
-    --add-data "$Root\config_example.json;." `
-    --add-data "$Root\transfer;transfer" `
+$PyInstallerArgs = @(
+    "-m", "PyInstaller",
+    "--noconfirm",
+    "--clean",
+    "--onedir",
+    "--windowed",
+    "--name", $AppName,
+    "--collect-all", "streamlit",
+    "--collect-all", "openpyxl",
+    "--add-data", "$Root\app.py;.",
+    "--add-data", "$Root\config_example.json;.",
+    "--add-data", "$Root\transfer;transfer",
     "$Root\desktop_launcher.py"
+)
+& $Python @PyInstallerArgs
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
 
 $ExePath = Join-Path $DistDir "$AppName\$AppName.exe"
