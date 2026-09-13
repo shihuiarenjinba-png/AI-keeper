@@ -61,9 +61,9 @@ def _wait_for_server(url: str, *, open_browser: bool) -> None:
 
 
 def _run_streamlit(app_script: Path, port: int) -> None:
-    # Configure through environment variables and the normal Streamlit CLI path.
-    # The explicit CLI flags are intentional duplication so packaged builds do not
-    # accidentally inherit a user's global Streamlit configuration.
+    # Packaged Streamlit can otherwise auto-detect development mode and reject a
+    # custom server.port. Force production-style local server configuration.
+    os.environ["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
     os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
     os.environ["STREAMLIT_SERVER_ADDRESS"] = "127.0.0.1"
     os.environ["STREAMLIT_SERVER_PORT"] = str(port)
@@ -74,6 +74,7 @@ def _run_streamlit(app_script: Path, port: int) -> None:
         "streamlit",
         "run",
         str(app_script),
+        "--global.developmentMode=false",
         "--server.address=127.0.0.1",
         f"--server.port={port}",
         "--server.headless=true",
@@ -115,7 +116,8 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except SystemExit:
+    except SystemExit as exc:
+        _log(f"Launcher exited with code: {exc.code}")
         raise
     except BaseException:
         _log("Launcher failed:\n" + traceback.format_exc())
