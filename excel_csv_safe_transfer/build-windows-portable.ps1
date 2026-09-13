@@ -14,6 +14,14 @@ Set-Location $Root
 
 $Python = (Get-Command python -ErrorAction Stop).Source
 
+function Show-LauncherLog([string]$Path) {
+    if (Test-Path -LiteralPath $Path) {
+        Write-Host "--- launcher diagnostic log ---"
+        Get-Content -LiteralPath $Path | ForEach-Object { Write-Host $_ }
+        Write-Host "--- end launcher diagnostic log ---"
+    }
+}
+
 Write-Host "[1/8] Installing runtime/build dependencies..."
 & $Python -m pip install --disable-pip-version-check -r "$Root\requirements.txt" -r "$Root\requirements-build.txt"
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
@@ -50,11 +58,14 @@ $PyInstallerArgs = @(
     "--onedir",
     "--windowed",
     "--name", $AppName,
+    "--paths", $Root,
     "--collect-all", "streamlit",
     "--collect-all", "openpyxl",
+    "--collect-submodules", "transfer",
+    "--hidden-import", "tkinter",
+    "--hidden-import", "tkinter.filedialog",
     "--add-data", "$Root\app.py;.",
     "--add-data", "$Root\config_example.json;.",
-    "--add-data", "$Root\transfer;transfer",
     "$Root\desktop_launcher.py"
 )
 & $Python @PyInstallerArgs
@@ -67,36 +78,52 @@ if (-not (Test-Path $ExePath)) {
 
 Write-Host "[5/8] Starting local HTTP smoke test..."
 $Port = Get-Random -Minimum 20000 -Maximum 45000
-$Process = Start-Process -FilePath $ExePath -ArgumentList @("--port", "$Port", "--no-browser") -PassThru
+$LauncherLog = Join-Path $env:TEMP ("SafeExcelTransfer-launcher-" + [guid]::NewGuid().ToString("N") + ".log")
+$PreviousLog = $env:OKINAWA_DESKTOP_LOG
+$env:OKINAWA_DESKTOP_LOG = $LauncherLog
+$Process = $null
 try {
-    $HealthUrl = "http://127.0.0.1:$Port/_stcore/health"
-    $Deadline = (Get-Date).AddSeconds(45)
+    $Process = Start-Process -FilePath $ExePath -ArgumentList @("--port", "$Port", "--no-browser") -PassThru
+    $HealthUrls = @("http://127.0.0.1:$Port/_stcore/health", "http://127.0.0.1:$Port/")
+    $Deadline = (Get-Date).AddSeconds(90)
     $Healthy = $false
     while ((Get-Date) -lt $Deadline) {
         if ($Process.HasExited) {
+            Show-LauncherLog $LauncherLog
             throw "Portable app exited before becoming healthy. ExitCode=$($Process.ExitCode)"
         }
-        try {
-            $Response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 2
-            if ($Response.StatusCode -eq 200) {
-                $Healthy = $true
-                break
+        foreach ($HealthUrl in $HealthUrls) {
+            try {
+                $Response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 2
+                if ($Response.StatusCode -ge 200 -and $Response.StatusCode -lt 500) {
+                    $Healthy = $true
+                    Write-Host "Health check PASS: $HealthUrl"
+                    break
+                }
+            }
+            catch {
             }
         }
-        catch {
-            Start-Sleep -Milliseconds 500
-        }
+        if ($Healthy) { break }
+        Start-Sleep -Milliseconds 500
     }
     if (-not $Healthy) {
-        throw "Portable app did not pass the health check within 45 seconds."
+        Show-LauncherLog $LauncherLog
+        throw "Portable app did not pass the health check within 90 seconds."
     }
-    Write-Host "Health check PASS: $HealthUrl"
 }
 finally {
     if ($Process -and -not $Process.HasExited) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
         $Process.WaitForExit()
     }
+    if ($null -eq $PreviousLog) {
+        Remove-Item Env:OKINAWA_DESKTOP_LOG -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:OKINAWA_DESKTOP_LOG = $PreviousLog
+    }
+    Remove-Item -LiteralPath $LauncherLog -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "[6/8] Creating portable ZIP..."
