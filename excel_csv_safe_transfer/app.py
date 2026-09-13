@@ -66,13 +66,18 @@ def _choose_local_files(kind: str) -> list[str]:
         if kind == "csv":
             selected = filedialog.askopenfilenames(
                 title="同じ月のCSVを複数選択できます",
-                filetypes=[("CSV", "*.csv"), ("すべてのファイル", "*.*")],
+                filetypes=[("対応CSVファイル", "*.csv"), ("すべてのファイル", "*.*")],
             )
             result = list(selected)
         else:
             selected_one = filedialog.askopenfilename(
                 title="更新するExcelを選択",
-                filetypes=[("Excel", "*.xlsx *.xlsm"), ("すべてのファイル", "*.*")],
+                filetypes=[
+                    ("対応Excelファイル", "*.xlsx *.xlsm"),
+                    ("Excelブック", "*.xlsx"),
+                    ("マクロ有効Excelブック", "*.xlsm"),
+                    ("すべてのファイル", "*.*"),
+                ],
             )
             result = [selected_one] if selected_one else []
         root.destroy()
@@ -134,7 +139,7 @@ csv_label_col, csv_input_col, csv_button_col = st.columns([1.15, 6.85, 2.0])
 with csv_label_col:
     st.markdown('<div class="path-label">パス =</div>', unsafe_allow_html=True)
 with csv_button_col:
-    if st.button("CSV参照", use_container_width=True, key="browse_csvs"):
+    if st.button("CSV参照", width="stretch", key="browse_csvs"):
         chosen = _choose_local_files("csv")
         if chosen:
             st.session_state["csv_paths_text"] = "\n".join(chosen)
@@ -145,14 +150,14 @@ with csv_input_col:
         key="csv_paths_text",
         height=115,
         placeholder=(
-            "C:\\Users\\Mitsuki\\Downloads\\2026_09_東京.csv\n"
-            "C:\\Users\\Mitsuki\\Downloads\\2026_09_大阪.csv\n"
-            "C:\\Users\\Mitsuki\\Downloads\\2026_09_名古屋.csv"
+            "C:\\Users\\ユーザー名\\Downloads\\売上 データ\\2026_09_東京.csv\n"
+            "C:\\Users\\ユーザー名\\Downloads\\売上 データ\\2026_09_大阪.csv\n"
+            "C:\\Users\\ユーザー名\\Downloads\\売上 データ\\2026_09_名古屋.csv"
         ),
         label_visibility="collapsed",
     )
 
-st.caption(r"記入例：C:\Users\Mitsuki\Downloads\2026_09_東京.csv")
+st.caption(r"記入例：C:\Users\ユーザー名\Downloads\売上 データ\2026_09_東京.csv")
 csv_paths = _paths_from_text(csv_text)
 
 if csv_paths:
@@ -163,7 +168,10 @@ if csv_paths:
             valid_count += 1
             st.write(f"✓ **{index}. {p.stem}**  —  `{p}`")
         else:
-            st.error(f"{index}. CSVが見つかりません: {csv_path}")
+            if p.exists() and p.suffix.lower() != ".csv":
+                st.error(f"{index}. このファイル形式には対応していません（CSVのみ）: {csv_path}")
+            else:
+                st.error(f"{index}. CSVが見つかりません: {csv_path}")
     if valid_count == len(csv_paths):
         st.success(f"{valid_count}個のCSVを確認しました。")
 else:
@@ -177,7 +185,7 @@ excel_label_col, excel_input_col, excel_button_col = st.columns([1.15, 6.85, 2.0
 with excel_label_col:
     st.markdown('<div class="path-label">パス =</div>', unsafe_allow_html=True)
 with excel_button_col:
-    if st.button("Excel参照", use_container_width=True, key="browse_excel"):
+    if st.button("Excel参照", width="stretch", key="browse_excel"):
         chosen = _choose_local_files("excel")
         if chosen:
             st.session_state["excel_path"] = chosen[0]
@@ -186,17 +194,21 @@ with excel_input_col:
     excel_path_raw = st.text_input(
         "Excelパス",
         key="excel_path",
-        placeholder=r"C:\Users\Mitsuki\Documents\2026年度.xlsx",
+        placeholder=r"C:\Users\ユーザー名\Documents\売上 データ\2026年度.xlsx",
         label_visibility="collapsed",
     )
 
 excel_path = _clean_path_text(excel_path_raw)
-st.caption(r"記入例：C:\Users\Mitsuki\Documents\2026年度.xlsx")
+st.caption(r"記入例：C:\Users\ユーザー名\Documents\売上 データ\2026年度.xlsx")
 
-if excel_path and Path(excel_path).expanduser().is_file():
-    st.success(f"更新対象: {Path(excel_path).expanduser().resolve()}")
-elif excel_path:
-    st.error(f"Excelが見つかりません: {excel_path}")
+if excel_path:
+    excel_candidate = Path(excel_path).expanduser()
+    if excel_candidate.suffix.lower() not in {".xlsx", ".xlsm"}:
+        st.error("このファイル形式には対応していません（.xlsx / .xlsm のみ）。")
+    elif excel_candidate.is_file():
+        st.success(f"更新対象: {excel_candidate.resolve()}")
+    else:
+        st.error(f"Excelが見つかりません: {excel_path}")
 else:
     st.caption("ここで指定したExcelファイル自体が更新されます。")
 st.markdown('</div>', unsafe_allow_html=True)
@@ -245,7 +257,7 @@ st.caption(preflight_state.preflight_hint)
 if st.button(
     "選択したCSVをまとめてチェック",
     type="primary",
-    use_container_width=True,
+    width="stretch",
     disabled=not preflight_state.can_preflight,
     key="preflight_button",
 ):
@@ -315,7 +327,7 @@ st.warning(
 if st.button(
     "このExcelを一括更新する",
     type="primary",
-    use_container_width=True,
+    width="stretch",
     disabled=not execute_state.can_execute,
     key="execute_button",
 ):

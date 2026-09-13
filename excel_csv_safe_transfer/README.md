@@ -20,21 +20,21 @@ WindowsローカルPCで使う **Streamlit UI** 版です。
 CSV例:
 
 ```text
-C:\Users\Mitsuki\Downloads\2026_09_東京.csv
-C:\Users\Mitsuki\Downloads\2026_09_大阪.csv
-C:\Users\Mitsuki\Downloads\2026_09_名古屋.csv
+C:\Users\ユーザー名\Downloads\売上 データ\2026_09_東京.csv
+C:\Users\ユーザー名\Downloads\売上 データ\2026_09_大阪.csv
+C:\Users\ユーザー名\Downloads\売上 データ\2026_09_名古屋.csv
 ```
 
 Excel例:
 
 ```text
-C:\Users\Mitsuki\Documents\2026年度.xlsx
+C:\Users\ユーザー名\Documents\売上 データ\2026年度.xlsx
 ```
 
 Windowsの「パスのコピー」で次のようにダブルクォートが付いても自動で除去します。
 
 ```text
-"C:\Users\Mitsuki\Documents\2026年度.xlsx"
+"C:\Users\ユーザー名\Documents\売上 データ\2026年度.xlsx"
 ```
 
 複数CSVは **1行に1ファイル** を入力します。`CSV参照` / `Excel参照` ボタンからローカルファイル選択画面を開くこともできます。

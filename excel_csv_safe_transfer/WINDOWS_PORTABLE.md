@@ -19,14 +19,21 @@ powershell -ExecutionPolicy Bypass -File .\build-windows-portable.ps1 -Version 1
 The build fails closed unless all automated checks pass:
 
 - installs the declared runtime/build dependencies
-- runs the existing pytest suite
+- selects and prints a supported 64-bit CPython (3.11 preferred; 3.11-3.14 accepted)
+- runs the existing pytest suite under a unique product-local `.test-tmp` directory
 - compiles the Python entry points
 - builds a PyInstaller one-directory application
+- includes Streamlit runtime/static assets without bundling its developer-only `.agents` documentation tree
 - launches the built EXE on localhost
 - verifies Streamlit `/_stcore/health` returns HTTP 200
-- creates the ZIP
+- writes the ZIP directly from staged files (without a path-length-increasing duplicate payload tree)
 - writes a SHA-256 sidecar
-- extracts the exact ZIP into a temporary directory and health-checks the EXE from that extracted copy
+- extracts the exact ZIP into a product-local verification directory and health-checks the EXE from that extracted copy
+- promotes the ZIP and sidecar into `release` only after every check passes; an existing valid release is retained on failure
+
+Set `OKINAWA_BUILD_PYTHON` to an explicit Python executable when a specific
+supported local runtime must be used. The selected executable, version, and
+architecture are printed before the build begins.
 
 ## Output
 

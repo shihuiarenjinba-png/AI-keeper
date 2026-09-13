@@ -3,6 +3,8 @@ node_modules/
 dist/
 .env
 .env.*
+__pycache__/
+.pytest_cache/
 
 # Local data / generated workbooks
 *.csv
@@ -14,7 +16,10 @@ _backup/
 work/
 
 # Safe Excel Transfer Windows portable build outputs
-excel_csv_safe_transfer/.build-venv/
+excel_csv_safe_transfer/.build-venv*/
+excel_csv_safe_transfer/.test-tmp/
+excel_csv_safe_transfer/.verify-tmp/
+excel_csv_safe_transfer/.release-staging/
 excel_csv_safe_transfer/build/
 excel_csv_safe_transfer/dist/
 excel_csv_safe_transfer/release/

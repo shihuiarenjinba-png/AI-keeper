@@ -37,3 +37,20 @@ def test_streamlit_app_is_windows_local_path_first():
     uploader_labels = [item.label for item in at.file_uploader]
     assert "同じ月のCSVを複数アップロード" not in uploader_labels
     assert "Excelをアップロード" not in uploader_labels
+
+
+def test_streamlit_app_shows_clear_errors_for_unsupported_existing_files(tmp_path: Path):
+    unsupported_csv = tmp_path / "売上 データ.txt"
+    unsupported_excel = tmp_path / "帳票.xls"
+    unsupported_csv.write_text("dummy", encoding="utf-8")
+    unsupported_excel.write_bytes(b"dummy")
+
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    at = AppTest.from_file(str(app_path), default_timeout=15).run()
+    at.text_area(key="csv_paths_text").set_value(str(unsupported_csv))
+    at.text_input(key="excel_path").set_value(str(unsupported_excel))
+    at.run()
+
+    errors = [item.value for item in at.error]
+    assert any("このファイル形式には対応していません（CSVのみ）" in item for item in errors)
+    assert any("このファイル形式には対応していません（.xlsx / .xlsm のみ）" in item for item in errors)
