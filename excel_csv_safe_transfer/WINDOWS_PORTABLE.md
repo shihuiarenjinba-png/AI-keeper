@@ -4,28 +4,41 @@ This directory can produce an **unsigned portable Windows ZIP** suitable for loc
 
 ## Build
 
-Open PowerShell in `excel_csv_safe_transfer` and run:
+Open PowerShell in `excel_csv_safe_transfer` and run the short wrapper:
+
+```powershell
+.\build-windows-portable.cmd 1.0.0
+```
+
+Equivalent PowerShell command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build-windows-portable.ps1 -Version 1.0.0
 ```
 
-The script performs these checks before creating the ZIP:
+The build fails closed unless all automated checks pass:
 
 - installs the declared runtime/build dependencies
-- runs the existing unit tests
+- runs the existing pytest suite
 - compiles the Python entry points
 - builds a PyInstaller one-directory application
 - launches the built EXE on localhost
 - verifies Streamlit `/_stcore/health` returns HTTP 200
 - creates the ZIP
 - writes a SHA-256 sidecar
+- extracts the exact ZIP into a temporary directory and health-checks the EXE from that extracted copy
 
 ## Output
 
 ```text
 release\Safe-Excel-Transfer-Windows-Portable-v1.0.0.zip
 release\Safe-Excel-Transfer-Windows-Portable-v1.0.0.zip.sha256
+```
+
+You can re-check an already built or copied ZIP with:
+
+```powershell
+.\verify-windows-portable.ps1 -ZipPath .\release\Safe-Excel-Transfer-Windows-Portable-v1.0.0.zip
 ```
 
 After extracting the ZIP, keep the entire extracted folder together and start:
