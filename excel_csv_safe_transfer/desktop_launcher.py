@@ -6,6 +6,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -24,17 +25,66 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _wait_for_server(url: str, *, open_browser: bool) -> None:
-    health_url = f"{url}/_stcore/health"
-    for _ in range(120):
+def _log(message: str) -> None:
+    log_path = os.environ.get("OKINAWA_DESKTOP_LOG", "").strip()
+    if not log_path:
+        return
+    try:
+        path = Path(log_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
+    except Exception:
+        pass
+
+
+def _server_is_ready(url: str) -> bool:
+    for candidate in (f"{url}/_stcore/health", url):
         try:
-            with urllib.request.urlopen(health_url, timeout=1.0) as response:
-                if response.status == 200:
-                    if open_browser:
-                        webbrowser.open(url, new=1)
-                    return
+            with urllib.request.urlopen(candidate, timeout=1.5) as response:
+                if 200 <= response.status < 500:
+                    return True
         except Exception:
-            time.sleep(0.25)
+            continue
+    return False
+
+
+def _wait_for_server(url: str, *, open_browser: bool) -> None:
+    for _ in range(240):
+        if _server_is_ready(url):
+            _log(f"Server ready: {url}")
+            if open_browser:
+                webbrowser.open(url, new=1)
+            return
+        time.sleep(0.25)
+    _log(f"Server readiness timeout: {url}")
+
+
+def _run_streamlit(app_script: Path, port: int) -> None:
+    # Configure through environment variables and the normal Streamlit CLI path.
+    # The explicit CLI flags are intentional duplication so packaged builds do not
+    # accidentally inherit a user's global Streamlit configuration.
+    os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+    os.environ["STREAMLIT_SERVER_ADDRESS"] = "127.0.0.1"
+    os.environ["STREAMLIT_SERVER_PORT"] = str(port)
+    os.environ["STREAMLIT_SERVER_HEADLESS"] = "true"
+    os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
+
+    sys.argv = [
+        "streamlit",
+        "run",
+        str(app_script),
+        "--server.address=127.0.0.1",
+        f"--server.port={port}",
+        "--server.headless=true",
+        "--server.fileWatcherType=none",
+        "--browser.gatherUsageStats=false",
+    ]
+
+    from streamlit.web.cli import main as streamlit_main
+
+    _log(f"Starting Streamlit on 127.0.0.1:{port}; app={app_script}")
+    streamlit_main()
 
 
 def main() -> int:
@@ -49,29 +99,24 @@ def main() -> int:
         raise FileNotFoundError(f"Application file is missing: {app_script}")
 
     os.chdir(runtime_dir)
-    os.environ.setdefault("STREAMLIT_BROWSER_GATHER_USAGE_STATS", "false")
-    os.environ.setdefault("STREAMLIT_SERVER_HEADLESS", "true")
-
     port = args.port if args.port > 0 else _free_port()
     url = f"http://127.0.0.1:{port}"
+
     threading.Thread(
         target=_wait_for_server,
         kwargs={"url": url, "open_browser": not args.no_browser},
         daemon=True,
     ).start()
 
-    from streamlit.web import bootstrap
-
-    flag_options = {
-        "server.address": "127.0.0.1",
-        "server.port": port,
-        "server.headless": True,
-        "server.fileWatcherType": "none",
-        "browser.gatherUsageStats": False,
-    }
-    bootstrap.run(str(app_script), False, [], flag_options)
+    _run_streamlit(app_script, port)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        _log("Launcher failed:\n" + traceback.format_exc())
+        raise
