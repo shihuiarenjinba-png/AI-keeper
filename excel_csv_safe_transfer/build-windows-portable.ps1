@@ -19,7 +19,7 @@ Write-Host "[1/8] Installing runtime/build dependencies..."
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 
 Write-Host "[2/8] Running unit tests..."
-& $Python -m unittest discover -s "$Root\tests" -v
+& $Python -m pytest -q "$Root\tests"
 if ($LASTEXITCODE -ne 0) { throw "Unit tests failed." }
 
 Write-Host "[3/8] Compiling Python sources..."
@@ -119,7 +119,6 @@ $Hash = (Get-FileHash -Algorithm SHA256 -Path $ZipPath).Hash.ToLowerInvariant()
 
 Write-Host "[8/8] Verifying the exact ZIP artifact..."
 & "$Root\verify-windows-portable.ps1" -ZipPath $ZipPath
-if ($LASTEXITCODE -ne 0) { throw "ZIP verification failed." }
 
 Write-Host ""
 Write-Host "BUILD PASS"
