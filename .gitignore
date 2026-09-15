@@ -6,6 +6,17 @@ dist/
 __pycache__/
 .pytest_cache/
 
+# Local secrets / credentials / signing material
+.streamlit/secrets.toml
+secrets.local.json
+secrets.local.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+
 # Local data / generated workbooks
 *.csv
 *.xlsx
@@ -14,6 +25,16 @@ __pycache__/
 *.xlsb
 _backup/
 work/
+logs/
+*.log
+
+# Customer/build artifacts must stay outside Git
+*.zip
+*.exe
+*.msi
+*.msix
+*.sha256
+*.sig
 
 # Safe Excel Transfer Windows portable build outputs
 excel_csv_safe_transfer/.build-venv*/
