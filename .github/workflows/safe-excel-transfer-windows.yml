@@ -1,0 +1,45 @@
+name: Safe Excel Transfer Windows
+
+on:
+  push:
+    branches:
+      - release/windows-portable-20260913
+    paths:
+      - "excel_csv_safe_transfer/**"
+      - ".github/workflows/safe-excel-transfer-windows.yml"
+  pull_request:
+    paths:
+      - "excel_csv_safe_transfer/**"
+      - ".github/workflows/safe-excel-transfer-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: excel_csv_safe_transfer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            excel_csv_safe_transfer/requirements.txt
+            excel_csv_safe_transfer/requirements-build.txt
+
+      - name: Build, unit test, EXE health test, and ZIP
+        shell: pwsh
+        run: .\build-windows-portable.ps1 -Version 0.1.0-ci
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Safe-Excel-Transfer-Windows-Portable
+          path: |
+            excel_csv_safe_transfer/release/*.zip
+            excel_csv_safe_transfer/release/*.sha256
+          if-no-files-found: error
